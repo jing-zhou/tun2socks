@@ -26,10 +26,16 @@ require (
 )
 
 require (
+	github.com/pion/logging v0.2.2 // indirect
+	github.com/pion/transport/v2 v2.2.4 // indirect
+)
+
+require (
 	github.com/ajg/form v1.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
+	github.com/pion/dtls/v2 v2.2.12
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
