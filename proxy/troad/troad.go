@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/jing-zhou/tun2socks/v2/dialer"
 	M "github.com/jing-zhou/tun2socks/v2/metadata"
@@ -26,11 +27,12 @@ type Troad struct {
 	addr   string
 	cacert string
 	header []byte
-	sni    string // <--- Add this
+	sni    string
+	mtu    int
 	unix   bool
 }
 
-func NewTroad(addr, cacert, sni string, header []byte) (*Troad, error) {
+func NewTroad(addr, cacert, sni string, header []byte, mtu int) (*Troad, error) {
 	unix := len(addr) > 0 && addr[0] == '/'
 
 	// For support Linux abstract namespace
@@ -43,6 +45,7 @@ func NewTroad(addr, cacert, sni string, header []byte) (*Troad, error) {
 		cacert: cacert,
 		header: header,
 		sni:    sni,
+		mtu:    mtu,
 		unix:   unix,
 	}, nil
 }
@@ -191,6 +194,7 @@ func (td *Troad) getDTLSConfig() (*dtls.Config, error) {
 		RootCAs:            tlsConf.RootCAs,
 		ServerName:         tlsConf.ServerName,
 		InsecureSkipVerify: tlsConf.InsecureSkipVerify,
+		MTU:                td.mtu,
 		// Standard secure ciphers for DTLS
 		CipherSuites: []dtls.CipherSuiteID{
 			dtls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
@@ -200,45 +204,52 @@ func (td *Troad) getDTLSConfig() (*dtls.Config, error) {
 }
 
 type socksPacketConn struct {
-	net.PacketConn
-
-	rAddr   net.Addr
-	tcpConn net.Conn
+	net.PacketConn // This is actually your *dtlsConnWrapper
+	rAddr          net.Addr
+	tcpConn        net.Conn
 }
 
-func (pc *socksPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+func (pc *socksPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	// 1. Wrap the raw UDP packet with Troad/SOCKS5 header
+	// [RSV][RSV][FRAG][ATYP][DST.ADDR][DST.PORT][DATA]
 	var packet []byte
+	var err error
+
 	if ma, ok := addr.(*M.Addr); ok {
 		packet, err = troad.EncodeUDPPacket(troad.SerializeAddr("", ma.Metadata().DstIP, ma.Metadata().DstPort), b)
 	} else {
 		packet, err = troad.EncodeUDPPacket(troad.ParseAddr(addr), b)
 	}
-
 	if err != nil {
-		return n, err
+		return 0, err
 	}
+
+	// 2. Send through DTLS. Since it's a 'dialed' DTLS conn,
+	// we just call Write (via our WriteTo shim).
 	return pc.PacketConn.WriteTo(packet, pc.rAddr)
 }
 
 func (pc *socksPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	// 1. Read from DTLS (decryption happens automatically)
 	n, _, err := pc.PacketConn.ReadFrom(b)
 	if err != nil {
 		return 0, nil, err
 	}
 
-	addr, payload, err := troad.DecodeUDPPacket(b)
+	// 2. Strip the Troad/SOCKS5 header to get the raw payload
+	addr, payload, err := troad.DecodeUDPPacket(b[:n])
 	if err != nil {
 		return 0, nil, err
 	}
 
 	udpAddr := addr.UDPAddr()
 	if udpAddr == nil {
-		return 0, nil, fmt.Errorf("convert %s to UDPAddr is nil", addr)
+		return 0, nil, fmt.Errorf("invalid UDP addr: %v", addr)
 	}
 
-	// due to DecodeUDPPacket is mutable, record addr length
+	// 3. Move payload to the front of the slice for tun2socks
 	copy(b, payload)
-	return n - len(addr) - 3, udpAddr, nil
+	return len(payload), udpAddr, nil
 }
 
 func (pc *socksPacketConn) Close() error {
@@ -272,6 +283,12 @@ func Parse(u *url.URL) (proxy.Proxy, error) {
 			}
 		}
 	}
+	// Parse MTU from string to int
+	mtuStr := query.Get("mtu")
+	mtu, _ := strconv.Atoi(mtuStr)
+	if mtu <= 0 {
+		mtu = 1500 // Default fallback if not provided
+	}
 
 	return &Troad{
 		addr:   address,
@@ -279,6 +296,7 @@ func Parse(u *url.URL) (proxy.Proxy, error) {
 		header: headerBytes,
 		sni:    sni,
 		unix:   len(address) > 0 && address[0] == '/',
+		mtu:    mtu,
 	}, nil
 }
 
@@ -293,18 +311,21 @@ func init() {
   *1. Standard Production URL
   *	This is the most common format using an IP address and a domain for SNI:
 
-  *	troad://1.2.3.4:443?header=your-secret-token&cacert=/etc/ssl/certs/ca.pem&sni=myserver.com
+  *	troad://1.2.3.4:443?header=your-secret-token&cacert=/etc/ssl/certs/ca.pem&sni=myserver.com&mtu=1300
   *
   *2. Simple Domain-based URL
   *	If the server's domain matches its certificate, you can omit the sni parameter:
 
-  *	troad://proxy.example.com:443?header=your-secret-token&cacert=./ca.crt
+  *	troad://proxy.example.com:443?header=your-secret-token&cacert=./ca.crt&mtu=1300
   *
   *3. Unix Domain Socket (UDS) URL
   *	If you are connecting to a local provider via a socket file:
 
-  *	troad:///tmp/troad.sock?header=your-token&cacert=/path/to/cert
+  *	troad:///tmp/troad.sock?header=your-token&cacert=/path/to/cert&mtu=1300
   *
+  3. Typical URL with MTU
+	Your configuration URL will now look like this:
+	troad://1.2.3.4:443?header=SGVsbG8=&sni=myserver.com&mtu=1300
 
    Breakdown of the Components:
 	Component			Part of URL			Purpose
@@ -314,7 +335,7 @@ func init() {
 	Header				?header=...		Your custom authentication token (extracted in Parse)
 	CA Cert				&cacert=...		Path to the .pem or .crt file on your local machine
 	SNI					&sni=...		The hostname used for the TLS handshake (Server Name Indication)
-
+	MTU					&mtu=...		Optional parameter to specify the MTU for DTLS (default is 1500)
 
 Pro-Tip for Configuration
 When using these URLs in a shell or a config file, remember to URL-encode special characters in your header (e.g., if your header contains a & or #, it must be written as %26 or %23).
