@@ -8,4 +8,5 @@ import (
 	_ "github.com/jing-zhou/tun2socks/v2/proxy/shadowsocks"
 	_ "github.com/jing-zhou/tun2socks/v2/proxy/socks4"
 	_ "github.com/jing-zhou/tun2socks/v2/proxy/ssh"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/troad"
 )
