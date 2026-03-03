@@ -9,10 +9,10 @@ import (
 	flag "github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 
-	_ "github.com/xjasonlyu/tun2socks/v2/dns"
-	"github.com/xjasonlyu/tun2socks/v2/engine"
-	"github.com/xjasonlyu/tun2socks/v2/internal/version"
-	"github.com/xjasonlyu/tun2socks/v2/log"
+	_ "github.com/jing-zhou/tun2socks/v2/dns"
+	"github.com/jing-zhou/tun2socks/v2/engine"
+	"github.com/jing-zhou/tun2socks/v2/internal/version"
+	"github.com/jing-zhou/tun2socks/v2/log"
 )
 
 var (

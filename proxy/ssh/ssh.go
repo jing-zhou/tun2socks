@@ -10,10 +10,10 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/xjasonlyu/tun2socks/v2/dialer"
-	M "github.com/xjasonlyu/tun2socks/v2/metadata"
-	"github.com/xjasonlyu/tun2socks/v2/proxy"
-	"github.com/xjasonlyu/tun2socks/v2/proxy/internal/utils"
+	"github.com/jing-zhou/tun2socks/v2/dialer"
+	M "github.com/jing-zhou/tun2socks/v2/metadata"
+	"github.com/jing-zhou/tun2socks/v2/proxy"
+	"github.com/jing-zhou/tun2socks/v2/proxy/internal/utils"
 )
 
 type SSH struct {

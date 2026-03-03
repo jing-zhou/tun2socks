@@ -9,18 +9,17 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/google/shlex"
+	"github.com/jing-zhou/tun2socks/v2/core"
+	"github.com/jing-zhou/tun2socks/v2/core/adapter"
+	"github.com/jing-zhou/tun2socks/v2/core/device"
+	"github.com/jing-zhou/tun2socks/v2/core/option"
+	"github.com/jing-zhou/tun2socks/v2/dialer"
+	"github.com/jing-zhou/tun2socks/v2/log"
+	"github.com/jing-zhou/tun2socks/v2/proxy"
+	"github.com/jing-zhou/tun2socks/v2/restapi"
+	"github.com/jing-zhou/tun2socks/v2/tunnel"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
-
-	"github.com/xjasonlyu/tun2socks/v2/core"
-	"github.com/xjasonlyu/tun2socks/v2/core/adapter"
-	"github.com/xjasonlyu/tun2socks/v2/core/device"
-	"github.com/xjasonlyu/tun2socks/v2/core/option"
-	"github.com/xjasonlyu/tun2socks/v2/dialer"
-	"github.com/xjasonlyu/tun2socks/v2/log"
-	"github.com/xjasonlyu/tun2socks/v2/proxy"
-	"github.com/xjasonlyu/tun2socks/v2/restapi"
-	"github.com/xjasonlyu/tun2socks/v2/tunnel"
 )
 
 var (

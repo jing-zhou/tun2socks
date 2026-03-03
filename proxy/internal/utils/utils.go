@@ -4,8 +4,8 @@ import (
 	"net"
 	"time"
 
-	M "github.com/xjasonlyu/tun2socks/v2/metadata"
-	"github.com/xjasonlyu/tun2socks/v2/transport/socks5"
+	M "github.com/jing-zhou/tun2socks/v2/metadata"
+	"github.com/jing-zhou/tun2socks/v2/transport/socks5"
 )
 
 const (

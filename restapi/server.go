@@ -13,8 +13,9 @@ import (
 	"github.com/go-chi/render"
 	"github.com/gorilla/websocket"
 
-	V "github.com/xjasonlyu/tun2socks/v2/internal/version"
-	"github.com/xjasonlyu/tun2socks/v2/tunnel/statistic"
+	V "github.com/jing-zhou/tun2socks/v2/internal/version"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/socks5"
+	"github.com/jing-zhou/tun2socks/v2/tunnel/statistic"
 )
 
 var (
