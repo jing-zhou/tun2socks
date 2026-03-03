@@ -840,3 +840,102 @@ if (this.noiseLength > 1500) {
     return;
 }
 this.currentState = State.SKIP_NOISE;
+
+========================================================
+In tun2socks, the MTU is a global setting applied to the TUN device itself, which handles both TCP and UDP traffic. 
+
+1. Where to Set the MTU
+You have three ways to define this, depending on how you run your project:
+
+Command Line: Use the -mtu flag when starting the binary.
+
+./tun2socks -device tun0 -proxy troad://... -mtu 1300
+
+
+YAML Config: If you use a configuration file, add the mtu key:
+
+device: tun0
+proxy: troad://...
+mtu: 1300
+
+System Commands: You can also set it manually on the network interface after it is created:
+
+Linux: sudo ip link set dev tun0 mtu 1300
+macOS: sudo ifconfig utun123 mtu 1300 
+
+2. Recommended Value for Troad (TLS + DTLS)
+Because your protocol adds multiple layers of overhead, a standard MTU of 1500 will likely cause fragmentation
+
+Suggested MTU: 1300 to 1350 bytes.
+
+Why?:
+TCP: tun2socks (via the gVisor stack) will automatically derive the TCP MSS from this MTU (usually MTU - 40 bytes), ensuring TCP segments fit.
+UDP: Since UDP lacks MSS negotiation, a lower MTU on the TUN device forces the application to send smaller packets, preventing them from exceeding the DTLS + SOCKS header limits of your tunnel. 
+
+3. MTU Calculation Breakdown
+Layer	                Typical Overhead
+Standard Ethernet	    1500 bytes (Limit)
+DTLS Header	            ~13–25 bytes
+Troad/SOCKS5 Header	    ~10–22 bytes
+Safe Margin	            ~50+ bytes
+Final Result	        ~1350 or lower
+
+Pro Tip: If you see "Packet Too Big" errors or high latency in your logs, keep dropping the MTU by 20 bytes until the connection stabilizes. 
+
+=========================================================
+3. Typical URL with MTU
+Your configuration URL will now look like this:
+troad://1.2.3.4:443?header=SGVsbG8=&sni=myserver.com&mtu=1300
+
+A Note on TCP MSS
+For TCP, tun2socks usually handles MSS clamping automatically based on the TUN interface MTU. However, since you are wrapping TCP in TLS, you have extra overhead. If you notice TCP connections hanging (common for HTTPS sites), it means the TLS-in-TCP segments are too large.
+The fix: Always ensure the Global MTU (set via -mtu flag) matches or is slightly lower than your td.mtu query parameter.
+Are you using a configuration file (like YAML) to manage these URLs, or are you passing them directly as command-line arguments?
+
+================================================================
+
+package engine
+
+import (
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/direct"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/http"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/reject"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/relay"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/shadowsocks"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/socks4"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/ssh"
+	_ "github.com/jing-zhou/tun2socks/v2/proxy/troad"
+)
+
+Perfect! You’ve nailed the blank import pattern.
+By adding _ "github.com/jing-zhou/tun2socks/v2/proxy/troad" to the engine package, you’ve ensured that your troad package's init() function runs as soon as the program starts. 
+This registers your Parse function into the global proxy registry, making the troad:// scheme active.
+
+=======================================================
+since this implementation is specifically for troad on android, should i remove other standard, will that save me some space or cpu load ?
+
+Since you are building for Android, where binary size (APK size) and memory footprint are critical, removing unused packages is a smart move.
+
+1. Will it save Space (Binary Size)?
+
+Yes. Go is a statically linked language.
+The Impact: Every proxy you import (ssh, shadowsocks, http, etc.) pulls in its own dependencies (like crypto/ssh, crypto/tls, or golang.org/x/crypto).
+The Result: Removing those blank imports allows the Go compiler's "dead code elimination" to strip out those libraries. You could easily save 2MB to 5MB on the final compressed binary, which is significant for an Android APK.
+
+2. Will it save CPU Load?
+
+Minimally.
+
+Idle: It won't save much CPU while the app is just sitting there, because those packages only consume CPU when they are actively handling a connection.
+Startup: It will slightly speed up the initial app launch (warm-up time) because the init() functions for all those registered protocols won't need to execute.
+
+3. Recommendations for Android
+If your app is strictly a Troad client, you should definitely clean up the engine package. Keep only what you actually need:
+
+package engine
+
+import (
+	_ "://github.com" // Keep for "bypass" rules
+	_ "://github.com" // Keep for "block" rules
+	_ "://github.com"  // Your new protocol
+)
