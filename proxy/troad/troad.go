@@ -87,48 +87,54 @@ func (td *Troad) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 }
 
 func (td *Troad) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
-	// 1. Setup TCP/TLS Control Channel
+	// 1. Establish the Secure Control Channel (TCP + TLS)
 	ctx, cancel := context.WithTimeout(context.Background(), utils.TCPConnectTimeout)
 	defer cancel()
 
 	rawConn, err := dialer.DialContext(ctx, "tcp", td.addr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dial control: %w", err)
 	}
 
 	tlsConf, _ := td.getTLSConfig()
 	tlsConn := tls.Client(rawConn, tlsConf)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		rawConn.Close()
-		return nil, err
+		return nil, fmt.Errorf("control tls handshake: %w", err)
 	}
 
-	// 2. Request UDP Associate & Get Bind Address
-	// Sending 0.0.0.0:0 as per SOCKS5 spec
+	// 2. Authenticate and Request UDP Associate
+	// Server verifies 'td.header' here and returns a temporary Bind Address
 	var targetAddr troad.Addr = []byte{troad.AtypIPv4, 0, 0, 0, 0, 0, 0}
 	addr, err := troad.ClientHandshake(tlsConn, targetAddr, troad.CmdUDPAssociate, td.header)
 	if err != nil {
 		tlsConn.Close()
-		return nil, err
+		return nil, fmt.Errorf("troad associate: %w", err)
 	}
 
-	// 3. Initiate DTLS Handshake on the returned Bind Address
+	// 3. Initiate DTLS on the Bind Address
 	bindAddr := addr.UDPAddr()
+	if bindAddr == nil {
+		tlsConn.Close()
+		return nil, errors.New("invalid bind address from server")
+	}
+
 	dtlsConf, err := td.getDTLSConfig()
 	if err != nil {
 		tlsConn.Close()
 		return nil, err
 	}
 
-	// Connect DTLS to the dynamic port the server just gave us
+	// Connect DTLS to the ephemeral port provided by the server
 	dtlsConn, err := dtls.Dial("udp", bindAddr, dtlsConf)
 	if err != nil {
 		tlsConn.Close()
-		return nil, fmt.Errorf("dtls handshake failed on %s: %w", bindAddr, err)
+		return nil, fmt.Errorf("dtls handshake on %s: %w", bindAddr, err)
 	}
 
-	// 4. Maintenance: If TCP drops, DTLS must drop
+	// 4. Maintenance: Link TCP life to DTLS life
 	go func() {
+		// Keep TCP open; if it closes (EOF), close the DTLS relay
 		io.Copy(io.Discard, tlsConn)
 		tlsConn.Close()
 		dtlsConn.Close()
