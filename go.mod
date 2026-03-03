@@ -14,6 +14,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
+	github.com/xjasonlyu/tun2socks/v2 v2.6.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.48.0
