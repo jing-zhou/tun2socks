@@ -29,7 +29,7 @@ var stopCh = make(chan struct{})
 //	StartTroad("1.2.3.4:443", "SGVsbG8=", "", "", 0)
 //
 // StartTroad now accepts the Android TUN file descriptor (tunFd)
-func StartTroad(tunFd int, serverAddr, header, cacertPath, sni string, mtu int) {
+func StartTroad(tunFd int, serverAddr, header, cacertPath, sni string, mtu int) error {
 	troadURL := buildTroadURL(serverAddr, header, cacertPath, sni, mtu)
 
 	key := &engine.Key{
@@ -56,15 +56,17 @@ func StartTroad(tunFd int, serverAddr, header, cacertPath, sni string, mtu int) 
 
 	engine.Stop()
 	log.Info("Troad Tun2Socks engine stopped successfully")
+	return nil
 }
 
-func StopTroad() {
+func StopTroad() error {
 	// Close the channel to unblock the Start function
 	select {
 	case stopCh <- struct{}{}:
 	default:
 		// Already stopping or no one listening
 	}
+	return nil
 }
 
 // buildTroadURL constructs a Troad protocol URL from parameters
