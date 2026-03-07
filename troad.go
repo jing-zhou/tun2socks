@@ -15,7 +15,7 @@ import (
 // Global channel to manage lifecycle from Android
 var stopCh = make(chan struct{})
 
-// StartTroadTun2Socks starts the tun2socks engine with Troad protocol
+// StartTroad starts the tun2socks engine with Troad protocol
 // Parameters:
 //   - serverAddr: server address (e.g., "1.2.3.4:443" or "proxy.example.com:443")
 //   - header: authentication header/token (will be base64 encoded if needed)
@@ -25,11 +25,11 @@ var stopCh = make(chan struct{})
 //
 // Example usage:
 //
-//	StartTroadTun2Socks("proxy.example.com:443", "my-token", "/path/to/ca.pem", "myserver.com", 1300)
-//	StartTroadTun2Socks("1.2.3.4:443", "SGVsbG8=", "", "", 0)
+//	StartTroad("proxy.example.com:443", "my-token", "/path/to/ca.pem", "myserver.com", 1300)
+//	StartTroad("1.2.3.4:443", "SGVsbG8=", "", "", 0)
 //
-// StartTroadTun2Socks now accepts the Android TUN file descriptor (tunFd)
-func StartTroadTun2Socks(tunFd int, serverAddr, header, cacertPath, sni string, mtu int) {
+// StartTroad now accepts the Android TUN file descriptor (tunFd)
+func StartTroad(tunFd int, serverAddr, header, cacertPath, sni string, mtu int) {
 	troadURL := buildTroadURL(serverAddr, header, cacertPath, sni, mtu)
 
 	key := &engine.Key{
@@ -58,7 +58,7 @@ func StartTroadTun2Socks(tunFd int, serverAddr, header, cacertPath, sni string, 
 	log.Info("Troad Tun2Socks engine stopped successfully")
 }
 
-func StopTroadTun2Socks() {
+func StopTroad() {
 	// Close the channel to unblock the Start function
 	select {
 	case stopCh <- struct{}{}:
