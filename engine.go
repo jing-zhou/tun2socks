@@ -1,5 +1,8 @@
 package engine
 
+/**
+ * an example implementation from
+ https://gitee.com/kuai-ma/tun2socks/blob/v2.5.12/startproxy/startproxy.go?skip_mobile=true
 import (
 	"bytes"
 	_ "embed"
@@ -400,3 +403,5 @@ func testTCPConnection(ip net.IP) bool {
 	}
 	return true
 }
+
+**/
