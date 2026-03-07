@@ -12,6 +12,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Global channel to manage lifecycle from Android
+var stopCh = make(chan struct{})
+
 // StartTroadTun2Socks starts the tun2socks engine with Troad protocol
 // Parameters:
 //   - serverAddr: server address (e.g., "1.2.3.4:443" or "proxy.example.com:443")
@@ -24,20 +27,44 @@ import (
 //
 //	StartTroadTun2Socks("proxy.example.com:443", "my-token", "/path/to/ca.pem", "myserver.com", 1300)
 //	StartTroadTun2Socks("1.2.3.4:443", "SGVsbG8=", "", "", 0)
-func StartTroadTun2Socks(serverAddr, header, cacertPath, sni string, mtu int) {
-	// Build Troad proxy URL
+//
+// StartTroadTun2Socks now accepts the Android TUN file descriptor (tunFd)
+func StartTroadTun2Socks(tunFd int, serverAddr, header, cacertPath, sni string, mtu int) {
 	troadURL := buildTroadURL(serverAddr, header, cacertPath, sni, mtu)
 
-	key.Proxy = troadURL
+	key := &engine.Key{
+		Proxy:    troadURL,
+		Device:   fmt.Sprintf("fd://%d", tunFd),
+		LogLevel: "info",
+		MTU:      mtu,
+	}
 
 	engine.Insert(key)
 
 	engine.Start()
-	defer engine.Stop()
 
+	// Wait for either a system signal OR a programmatic stop call
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
+
+	select {
+	case <-sigCh:
+		log.Info("Stop triggered by OS signal")
+	case <-stopCh:
+		log.Info("Stop triggered programmatically by Android")
+	}
+
+	engine.Stop()
+	log.Info("Troad Tun2Socks engine stopped successfully")
+}
+
+func StopTroadTun2Socks() {
+	// Close the channel to unblock the Start function
+	select {
+	case stopCh <- struct{}{}:
+	default:
+		// Already stopping or no one listening
+	}
 }
 
 // buildTroadURL constructs a Troad protocol URL from parameters
@@ -94,10 +121,4 @@ func buildTroadURL(serverAddr, header, cacertPath, sni string, mtu int) string {
 
 	log.Infof("Troad proxy URL: %s", troadURL)
 	return troadURL
-}
-
-// StopTroadTun2Socks stops the Troad tun2socks engine
-// This is a convenience wrapper around the engine's stop function
-func StopTroadTun2Socks() {
-	engine.Stop()
 }
