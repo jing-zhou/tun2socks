@@ -13,7 +13,7 @@ import (
 )
 
 // Global channel to manage lifecycle from Android
-var stopCh = make(chan struct{})
+var stopCh = make(chan struct{}, 1)
 
 // StartTroad starts the tun2socks engine with Troad protocol
 // Parameters:
@@ -55,6 +55,13 @@ func StartTroad(tunFd int, serverAddr, header, cacertPath, sni string, mtu int) 
 	}
 
 	engine.Stop()
+
+	// ADD THIS: Drain the stopCh to clear any stale signals for the next run
+	select {
+	case <-stopCh:
+	default:
+	}
+
 	log.Info("Troad Tun2Socks engine stopped successfully")
 	return nil
 }
