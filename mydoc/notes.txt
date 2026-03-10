@@ -947,3 +947,64 @@ Sounds like a plan! You’ve got a solid TCP-TLS-Control and UDP-DTLS-Data archi
 
 Before we pause, just a quick tip: since you're heading toward Android integration next, make sure you have the Android NDK set up and your GOOS=android environment variables ready. We'll likely be looking at how to pass the VPN File Descriptor (fd) from Java/Kotlin into your Go engine. 
 Have a great rest of your day, and I'll be here whenever you're ready to tackle the JNI or Gomobile side of things!
+
+=====================================================
+To implement the protect() function, you must bridge the Go network stack to the Android VpnService. 
+This is necessary because every outbound socket created by the Go engine must be "protected" to bypass the VPN and avoid an infinite routing loop. 
+====================================
+1. Create a "Protector" Interface in Go
+In your troadengine package, define an interface that Go can use to call back into Android.
+
+package troadengine
+
+// SocketProtector is an interface for Android's VpnService.protect()
+type SocketProtector interface {
+	Protect(fd int) bool
+}
+
+var protector SocketProtector
+
+// RegisterProtector is called from Kotlin to provide the VpnService instance
+func RegisterProtector(p SocketProtector) {
+	protector = p
+}
+
+======================================
+
+2. Update Go Dial Logic
+You must ensure that every time the Go engine creates a new outbound connection (TCP or UDP), 
+it calls this protector. In many tun2socks implementations, this is done by setting a Control function on the net.Dialer.
+
+import (
+	"context"
+	"net"
+	"syscall"
+)
+
+func getDialer() *net.Dialer {
+	return &net.Dialer{
+		Control: func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				if protector != null {
+					protector.Protect(int(fd))
+				}
+			})
+		},
+	}
+}
+
+=====================================
+3. Implement the Interface in Kotlin
+In your TroadService.kt, you can now pass the service itself to the Go engine because VpnService already has a protect(int) method
+
+// In TroadService.kt
+override fun onCreate() {
+    super.onCreate()
+    // Register this service as the protector for Go
+    // gomobile will allow 'this' to be passed if it implements the SocketProtector interface
+    Troadengine.registerProtector(object : troadengine.SocketProtector {
+        override fun protect(fd: Long): Boolean {
+            return this@TroadService.protect(fd.toInt())
+        }
+    })
+}
