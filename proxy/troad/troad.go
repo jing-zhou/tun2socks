@@ -179,8 +179,9 @@ func (td *Troad) getTLSConfig() (*tls.Config, error) {
 	}
 
 	return &tls.Config{
-		RootCAs:    certPool,
-		ServerName: serverName, // This MUST match the CN/SAN in the certificate
+		RootCAs:            certPool,
+		ServerName:         serverName,       // This MUST match the CN/SAN in the certificate
+		InsecureSkipVerify: serverName == "", // Add this as a safety net
 	}, nil
 }
 
