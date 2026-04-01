@@ -270,20 +270,24 @@ func Parse(u *url.URL) (proxy.Proxy, error) {
 	headerStr := query.Get("header")
 
 	var headerBytes []byte
-	var err error
 
+	// Optimized decoding chain
 	if headerStr != "" {
-		// Attempt to decode as URL-Safe Base64 first
-		headerBytes, err = base64.URLEncoding.DecodeString(headerStr)
-		if err != nil {
-			// Fallback: Try Standard Base64 if URL-Safe fails
-			headerBytes, err = base64.StdEncoding.DecodeString(headerStr)
-			if err != nil {
-				// Final Fallback: If not valid Base64, treat as raw string bytes
-				headerBytes = []byte(headerStr)
-			}
+		// 1. Try URL-Safe Unpadded (Your Kotlin trimEnd case)
+		if b, err := base64.RawURLEncoding.DecodeString(headerStr); err == nil {
+			headerBytes = b
+		} else if b, err := base64.URLEncoding.DecodeString(headerStr); err == nil {
+			// 2. Try URL-Safe Padded (In case you stop trimming)
+			headerBytes = b
+		} else if b, err := base64.StdEncoding.DecodeString(headerStr); err == nil {
+			// 3. Try Standard Padded
+			headerBytes = b
+		} else {
+			// 4. Final Fallback: Raw bytes
+			headerBytes = []byte(headerStr)
 		}
 	}
+
 	// Parse MTU from string to int
 	mtuStr := query.Get("mtu")
 	mtu, _ := strconv.Atoi(mtuStr)
