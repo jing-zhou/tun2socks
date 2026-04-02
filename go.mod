@@ -17,25 +17,25 @@ require (
 	github.com/xjasonlyu/tun2socks/v2 v2.6.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/crypto v0.48.0
-	golang.org/x/sys v0.41.0
-	golang.org/x/time v0.14.0
+	golang.org/x/crypto v0.49.0
+	golang.org/x/sys v0.42.0
+	golang.org/x/time v0.15.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	gopkg.in/yaml.v3 v3.0.1
-	gvisor.dev/gvisor v0.0.0-20260213200628-444f74c20034
+	gvisor.dev/gvisor v0.0.0-20260325202830-7644cf3a343c
 )
 
 require (
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/transport/v2 v2.2.4 // indirect
-	golang.org/x/mobile v0.0.0-20260217195705-b56b3793a9c4 // indirect
-	golang.org/x/mod v0.33.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/tools v0.42.0 // indirect
+	golang.org/x/mobile v0.0.0-20260312152759-81488f6aeb60 // indirect
+	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/tools v0.43.0 // indirect
 )
 
 require (
-	github.com/ajg/form v1.6.1 // indirect
+	github.com/ajg/form v1.7.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -44,8 +44,8 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sirupsen/logrus v1.9.4
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
-	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
+	golang.org/x/net v0.52.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
