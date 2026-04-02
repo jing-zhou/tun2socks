@@ -2,9 +2,11 @@ package troad
 
 import (
 	"context"
+	"crypto/elliptic"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+
 	"errors"
 	"fmt"
 	"io"
@@ -196,6 +198,9 @@ func (td *Troad) getDTLSConfig() (*dtls.Config, error) {
 		ServerName:         tlsConf.ServerName,
 		InsecureSkipVerify: tlsConf.InsecureSkipVerify,
 		MTU:                td.mtu,
+
+		EllipticCurves: []elliptic.Curve{elliptic.P256()},
+
 		// Standard secure ciphers for DTLS
 		CipherSuites: []dtls.CipherSuiteID{
 			dtls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
