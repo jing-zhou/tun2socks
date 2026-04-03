@@ -3,7 +3,7 @@ package fdbased
 import (
 	"errors"
 
-	"github.com/xjasonlyu/tun2socks/v2/core/device"
+	"github.com/jing-zhou/tun2socks/v2/core/device"
 )
 
 func Open(name string, mtu uint32, offset int) (device.Device, error) {

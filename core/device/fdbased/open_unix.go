@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/xjasonlyu/tun2socks/v2/core/device"
-	"github.com/xjasonlyu/tun2socks/v2/core/device/iobased"
+	"github.com/jing-zhou/tun2socks/v2/core/device"
+	"github.com/jing-zhou/tun2socks/v2/core/device/iobased"
 )
 
 func open(fd int, mtu uint32, offset int) (device.Device, error) {

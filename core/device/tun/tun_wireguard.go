@@ -8,8 +8,8 @@ import (
 
 	"golang.zx2c4.com/wireguard/tun"
 
-	"github.com/xjasonlyu/tun2socks/v2/core/device"
-	"github.com/xjasonlyu/tun2socks/v2/core/device/iobased"
+	"github.com/jing-zhou/tun2socks/v2/core/device"
+	"github.com/jing-zhou/tun2socks/v2/core/device/iobased"
 )
 
 type TUN struct {

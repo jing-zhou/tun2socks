@@ -20,7 +20,7 @@ import (
 	"github.com/jing-zhou/tun2socks/v2/proxy"
 	"github.com/jing-zhou/tun2socks/v2/proxy/internal/utils"
 	"github.com/jing-zhou/tun2socks/v2/transport/troad"
-	"github.com/pion/dtls/v2"
+	"github.com/pion/dtls/v3"
 )
 
 var _ proxy.Proxy = (*Troad)(nil)
