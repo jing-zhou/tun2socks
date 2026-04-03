@@ -2,7 +2,6 @@ package troad
 
 import (
 	"context"
-	"crypto/elliptic"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -21,6 +20,7 @@ import (
 	"github.com/jing-zhou/tun2socks/v2/proxy/internal/utils"
 	"github.com/jing-zhou/tun2socks/v2/transport/troad"
 	"github.com/pion/dtls/v3"
+	"github.com/pion/dtls/v3/pkg/crypto/elliptic"
 )
 
 var _ proxy.Proxy = (*Troad)(nil)
@@ -124,14 +124,14 @@ func (td *Troad) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, errors.New("invalid bind address from server")
 	}
 
-	dtlsConf, err := td.getDTLSConfig()
+	dtlsConf, err := td.getDTLSClientOptions()
 	if err != nil {
 		tlsConn.Close()
 		return nil, err
 	}
 
 	// Connect DTLS to the ephemeral port provided by the server
-	dtlsConn, err := dtls.Dial("udp", bindAddr, dtlsConf)
+	dtlsConn, err := dtls.DialWithOptions("udp", bindAddr, dtlsConf...)
 	if err != nil {
 		tlsConn.Close()
 		return nil, fmt.Errorf("dtls handshake on %s: %w", bindAddr, err)
@@ -187,26 +187,34 @@ func (td *Troad) getTLSConfig() (*tls.Config, error) {
 	}, nil
 }
 
-func (td *Troad) getDTLSConfig() (*dtls.Config, error) {
+func (td *Troad) getDTLSClientOptions() ([]dtls.ClientOption, error) {
 	tlsConf, err := td.getTLSConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	return &dtls.Config{
-		RootCAs:            tlsConf.RootCAs,
-		ServerName:         tlsConf.ServerName,
-		InsecureSkipVerify: tlsConf.InsecureSkipVerify,
-		MTU:                td.mtu,
+	options := []dtls.ClientOption{
+		// Root CAs and ServerName from your TLS config
+		dtls.WithRootCAs(tlsConf.RootCAs),
+		dtls.WithServerName(tlsConf.ServerName),
 
-		EllipticCurves: []elliptic.Curve{elliptic.P256()},
+		// InsecureSkipVerify
+		dtls.WithInsecureSkipVerify(tlsConf.InsecureSkipVerify),
 
-		// Standard secure ciphers for DTLS
-		CipherSuites: []dtls.CipherSuiteID{
+		// MTU configuration
+		dtls.WithMTU(td.mtu),
+
+		// Elliptic Curves (Note: v3 has migrated toward ecdh-based options)
+		dtls.WithEllipticCurves(elliptic.P256),
+
+		// Cipher Suites
+		dtls.WithCipherSuites(
 			dtls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 			dtls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		},
-	}, nil
+		),
+	}
+
+	return options, nil
 }
 
 type socksPacketConn struct {
