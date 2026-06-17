@@ -8,12 +8,22 @@ import (
 	"syscall"
 
 	"github.com/jing-zhou/tun2socks/v2/engine"
+	"github.com/jing-zhou/tun2socks/v2/proxy/troad"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// Global channel to manage lifecycle from Android
-var stopCh = make(chan struct{}, 1)
+
+var (
+
+	// Global channel to manage lifecycle from Android
+	stopCh       = make(chan struct{}, 1)	
+)
+
+// UpdateHeader is exported to Android to hot-provision renewed tokens on-the-fly.
+func UpdateHeader(newHeader []byte) error {
+	return troad.UpdateHeader(newHeader)
+}
 
 // StartTroad starts the tun2socks engine with Troad protocol
 // Parameters:
@@ -29,8 +39,14 @@ var stopCh = make(chan struct{}, 1)
 //	StartTroad("1.2.3.4:443", "SGVsbG8=", "", "", 0)
 //
 // StartTroad now accepts the Android TUN file descriptor (tunFd)
-func StartTroad(tunFd int, serverAddr, header, cacertPath, sni string, mtu int) error {
-	troadURL := buildTroadURL(serverAddr, header, cacertPath, sni, mtu)
+func StartTroad(tunFd int, serverAddr string, header []byte, cacertPath, sni string, mtu int) error {
+	
+	// Initialize the memory register with the first configuration payload
+	troad.UpdateHeader(header)
+
+	// CRITICAL SHIFT: Pass a functional closure or hook to your underlying proxy implementation 
+	// instead of a immutable query token string if 'engine' executes single-shot parsing.
+	troadURL := buildTroadURL(serverAddr, cacertPath, sni, mtu)
 
 	key := &engine.Key{
 		Proxy:    troadURL,
@@ -96,7 +112,7 @@ func StopTroad() error {
 //  2. With IP and SNI: troad://1.2.3.4:443?header=SGVsbG8=&sni=myserver.com&mtu=1300
 //  3. Unix socket: troad:///tmp/troad.sock?header=token&cacert=/path/to/cert&mtu=1300
 //  4. Minimal setup: troad://proxy.example.com:443?header=my-token
-func buildTroadURL(serverAddr, header, cacertPath, sni string, mtu int) string {
+func buildTroadURL(serverAddr, cacertPath, sni string, mtu int) string {
 	if serverAddr == "" {
 		log.Fatal("Troad server address cannot be empty")
 	}
@@ -106,10 +122,6 @@ func buildTroadURL(serverAddr, header, cacertPath, sni string, mtu int) string {
 
 	// Build query parameters
 	params := url.Values{}
-
-	if header != "" {
-		params.Add("header", header)
-	}
 
 	if cacertPath != "" {
 		params.Add("cacert", cacertPath)

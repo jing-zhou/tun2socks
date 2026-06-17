@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
+	"sync"
 
 	"errors"
 	"fmt"
@@ -19,22 +19,47 @@ import (
 	"github.com/jing-zhou/tun2socks/v2/proxy"
 	"github.com/jing-zhou/tun2socks/v2/proxy/internal/utils"
 	"github.com/jing-zhou/tun2socks/v2/transport/troad"
+
 	"github.com/pion/dtls/v3"
 	"github.com/pion/dtls/v3/pkg/crypto/elliptic"
 )
 
-var _ proxy.Proxy = (*Troad)(nil)
+var (
+
+	_ proxy.Proxy = (*Troad)(nil)
+
+	// ADD THIS: Thread-safe storage for the live authentication header
+	activeHeader []byte
+	headerMutex  sync.RWMutex
+
+)
 
 type Troad struct {
 	addr   string
 	cacert string
-	header []byte
 	sni    string
 	mtu    int
 	unix   bool
 }
 
-func NewTroad(addr, cacert, sni string, header []byte, mtu int) (*Troad, error) {
+// UpdateHeader is exported to Android to hot-provision renewed tokens on-the-fly.
+func UpdateHeader(newHeader []byte) error {
+	headerMutex.Lock()
+	// Create a deep copy of the slice to remain thread-safe from JVM garbage collection
+	activeHeader = make([]byte, len(newHeader))
+	copy(activeHeader, newHeader)
+	headerMutex.Unlock()
+	return nil
+}
+
+// GetHeader retrieves the current token string safely across threads.
+func GetHeader() []byte {
+	headerMutex.RLock()
+	defer headerMutex.RUnlock()
+	return activeHeader
+}
+
+func NewTroad(addr, cacert, sni string, mtu int) (*Troad, error) {
 	unix := len(addr) > 0 && addr[0] == '/'
 
 	// For support Linux abstract namespace
@@ -45,7 +70,6 @@ func NewTroad(addr, cacert, sni string, header []byte, mtu int) (*Troad, error) 
 	return &Troad{
 		addr:   addr,
 		cacert: cacert,
-		header: header,
 		sni:    sni,
 		mtu:    mtu,
 		unix:   unix,
@@ -82,7 +106,7 @@ func (td *Troad) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 	}
 
 	// Now proceed with your protocol-specific handshake (Trojan/Troad)
-	_, err = troad.ClientHandshake(tlsConn, troad.SerializeAddr("", metadata.DstIP, metadata.DstPort), troad.CmdConnect, td.header)
+	_, err = troad.ClientHandshake(tlsConn, troad.SerializeAddr("", metadata.DstIP, metadata.DstPort), troad.CmdConnect, GetHeader())
 	if err != nil {
 		tlsConn.Close()
 		return nil, err
@@ -111,7 +135,7 @@ func (td *Troad) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	// 2. Authenticate and Request UDP Associate
 	// Server verifies 'td.header' here and returns a temporary Bind Address
 	var targetAddr troad.Addr = []byte{troad.AtypIPv4, 0, 0, 0, 0, 0, 0}
-	addr, err := troad.ClientHandshake(tlsConn, targetAddr, troad.CmdUDPAssociate, td.header)
+	addr, err := troad.ClientHandshake(tlsConn, targetAddr, troad.CmdUDPAssociate, GetHeader())
 	if err != nil {
 		tlsConn.Close()
 		return nil, fmt.Errorf("troad associate: %w", err)
@@ -280,26 +304,7 @@ func Parse(u *url.URL) (proxy.Proxy, error) {
 	query := u.Query()
 	caCertPath := query.Get("cacert")
 	sni := query.Get("sni")
-	headerStr := query.Get("header")
-
-	var headerBytes []byte
-
-	// Optimized decoding chain
-	if headerStr != "" {
-		// 1. Try URL-Safe Unpadded (Your Kotlin trimEnd case)
-		if b, err := base64.RawURLEncoding.DecodeString(headerStr); err == nil {
-			headerBytes = b
-		} else if b, err := base64.URLEncoding.DecodeString(headerStr); err == nil {
-			// 2. Try URL-Safe Padded (In case you stop trimming)
-			headerBytes = b
-		} else if b, err := base64.StdEncoding.DecodeString(headerStr); err == nil {
-			// 3. Try Standard Padded
-			headerBytes = b
-		} else {
-			// 4. Final Fallback: Raw bytes
-			headerBytes = []byte(headerStr)
-		}
-	}
+	
 
 	// Parse MTU from string to int
 	mtuStr := query.Get("mtu")
@@ -311,7 +316,6 @@ func Parse(u *url.URL) (proxy.Proxy, error) {
 	return &Troad{
 		addr:   address,
 		cacert: caCertPath,
-		header: headerBytes,
 		sni:    sni,
 		unix:   len(address) > 0 && address[0] == '/',
 		mtu:    mtu,
