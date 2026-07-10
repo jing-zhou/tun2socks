@@ -150,12 +150,16 @@ func (a Addr) UDPAddr() *net.UDPAddr {
 }
 
 // ClientHandshake fast-tracks SOCKS initialization to get target address to connect on client side.
+// It enforces strict bounds on server-side pseudo-traffic used to obfuscate TLS-in-TLS fingerprinting.
 func ClientHandshake(rw io.ReadWriter, addr Addr, command Command, header []byte) (Addr, error) {
-	buf := make([]byte, MaxAddrLen)
+	// Size the buffer to easily handle both MaxAddrLen and the strict max 900-byte pseudo payload.
+	// This keeps all handshake reading entirely on the stack (zero allocation path).
+	buf := make([]byte, 1024)
 
-	// VER, CMD, RSV, ADDR
+	// Prepare payload: VER, CMD, RSV, ADDR
 	req := bufferpool.Get()
 	defer bufferpool.Put(req)
+
 	req.Grow(len(header) + 3 + MaxAddrLen)
 	req.Write(header)
 	req.WriteByte(Version)
@@ -163,25 +167,53 @@ func ClientHandshake(rw io.ReadWriter, addr Addr, command Command, header []byte
 	req.WriteByte(0x00 /* RSV */)
 	req.Write(addr)
 
+	// Send the obfuscated header + SOCKS request to the server
 	if _, err := rw.Write(req.Bytes()); err != nil {
 		return nil, err
 	}
 
-	// VER, REP, RSV
-	if _, err := io.ReadFull(rw, buf[:3]); err != nil {
-		return nil, err
+	// 1. Read the 2-byte length field of the incoming pseudo-traffic
+	if _, err := io.ReadFull(rw, buf[:2]); err != nil {
+		return nil, fmt.Errorf("failed to read pseudo-traffic length header: %w", err)
+	}
+	
+	// Interpret the length field (using network Big Endian)
+	pseudoLength := binary.BigEndian.Uint16(buf[:2])
+
+	// 2. Enforce strict upper bound constraint
+	if pseudoLength > 900 {
+		return nil, fmt.Errorf("protocol anomaly: pseudo-traffic length %d exceeds safety limit of 900", pseudoLength)
+	}
+	// The length field must be at least 600 bytes and end with CRLF trailer
+	if pseudoLength < 600 {
+		return nil, fmt.Errorf("protocol anomaly: pseudo-traffic length %d is too short", pseudoLength)
 	}
 
-	/* TODO: handle the pseduo-traffic; first 2 byte are the length field, follow a pseduo-traffic of that length, the purpose is
-	 * to mimic a server HTTPS response, thus obfuscate traffic pattern of TLS in TLS
-	 */
+	// 3. Read exactly the remainder of the pseudo-traffic payload.
+	// Note: pseudoLength already includes the trailing CRLF bytes.
+	pseudoBuf := buf[:pseudoLength]
+	if _, err := io.ReadFull(rw, pseudoBuf); err != nil {
+		return nil, fmt.Errorf("failed to swallow pseudo-traffic payload: %w", err)
+	}
+
+	// 4. Structural validation: Check the final two bytes for raw '\r' and '\n'
+	if pseudoBuf[pseudoLength-2] != '\r' || pseudoBuf[pseudoLength-1] != '\n' {
+		return nil, fmt.Errorf("protocol anomaly: pseudo-traffic missing trailing CRLF bytes")
+	}
+
+	// 5. Decoy bypassed. Read the authentic SOCKS reply header: VER, REP, RSV (3 bytes)
+	if _, err := io.ReadFull(rw, buf[:3]); err != nil {
+		return nil, fmt.Errorf("failed to read socks reply header: %w", err)
+	}
 
 	if rep := Reply(buf[1]); rep != 0x00 /* SUCCEEDED */ {
-		return nil, fmt.Errorf("%s: %s", command, rep)
+		return nil, fmt.Errorf("%s: proxy error code %s", command, rep)
 	}
 
+	// 6. Read and return the final bound address from the server
 	return ReadAddr(rw, buf)
 }
+
 
 func ReadAddr(r io.Reader, b []byte) (Addr, error) {
 	if len(b) < MaxAddrLen {
